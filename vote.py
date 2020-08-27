@@ -21,7 +21,7 @@ def try_vote_once(ocr):
     headers = {
         "Content-Type": "application/x-www-form-urlencoded; charset=UTF-8",
         "Origin": "https://h5.zhiyyuan.cn",
-        "Referer": "https://h5.zhiyyuan.cn/m.php?v=10a1d7ac79d49544?xcb808wy&id=157&sign=friend&id=110&sign=circle&id=125&sign=circle&id=125&sign=circle&id=106&sign=friend",
+        # "Referer": "https://h5.zhiyyuan.cn/m.php?v=10a1d7ac79d49544?xcb808wy&id=157&sign=friend&id=110&sign=circle&id=125&sign=circle&id=125&sign=circle&id=106&sign=friend",
         "User-Agent":"Mozilla/5.0 (Macintosh; Intel Mac OS X 10_13_1) AppleWebKit/604.3.5 (KHTML, like Gecko) MicroMessenger/6.8.0(0x16080000) MacWechat/2.4.2(0x12040211) NetType/WIFI WindowsWechat",
     }
     randomNum = 19030984501745 * 1000000 + random.randint(0, 999999)
@@ -135,6 +135,7 @@ def try_vote_once(ocr):
 
 
     ########################## step4: vote ########################################
+    res = requests.get("https://h5.zhiyyuan.cn/m.php?v=10a1d7ac79d49544?xcb808wy&id=157&sign=friend&id=110&sign=circle&id=125&sign=circle&id=125&sign=circle&id=106&sign=friend")
     data = {
         "brandid": "1903098",  # 固定
         "itemid": "4501745",  # 固定，与1中id保持统一
@@ -167,4 +168,4 @@ if __name__ == '__main__':
                 # 上一次尝试成功了， 需要休眠30分钟
                 time.sleep(30 * 60)
             rtn = try_vote_once(ocr)
-            time.sleep(1)
+            time.sleep(3)
