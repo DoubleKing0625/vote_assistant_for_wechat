@@ -4,6 +4,7 @@ import base64
 import random
 import string
 import requests
+import datetime
 
 from PIL import Image
 from cnocr import CnOcr
@@ -156,7 +157,14 @@ if __name__ == '__main__':
     ocr = CnOcr(cand_alphabet=string.digits)
 
     while True:
-        if rtn in ["success", "您已经进行过支持了！每位用户每半小时可支持一次"]:
-            # 上一次尝试成功了， 需要休眠30分钟
-            time.sleep(30 * 60)
-        rtn = try_vote_once(ocr)
+
+        start_time = datetime.datetime.strptime(str(datetime.datetime.now().date()) + '7:00', '%Y-%m-%d%H:%M')
+        end_time = datetime.datetime.strptime(str(datetime.datetime.now().date()) + '23:50', '%Y-%m-%d%H:%M')
+        # 当前时间
+        n_time = datetime.datetime.now()
+        if n_time > start_time and n_time < end_time:
+            if rtn in ["success", "您已经进行过支持了！每位用户每半小时可支持一次"]:
+                # 上一次尝试成功了， 需要休眠30分钟
+                time.sleep(30 * 60)
+            rtn = try_vote_once(ocr)
+            time.sleep(1)
