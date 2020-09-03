@@ -3,26 +3,81 @@ import json
 import base64
 import random
 import string
+import uuid
+
 import requests
 import datetime
-
+import urllib3
+import re
 from PIL import Image
 from cnocr import CnOcr
-
 from collections import defaultdict
-
-from Crypto.Cipher import AES,DES
+from Crypto.Cipher import AES, DES
 from Crypto.Util.Padding import pad
+from urllib import parse
+
+urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
+
+
+def request_token():
+    ouid = str(33) + str(random.randint(0, 999999))
+    headers_info = {
+        "uid": ouid,
+        "token": ""
+    }
+    print("headers_info: {}".format(headers_info))
+    headers_data1 = parse.quote(json.dumps(headers_info))
+    headers_data2 = parse.quote(headers_data1)
+    # print(headers_data2)
+
+    ########################## step1: get D5O_uphit_1903098 ########################################
+    headers = {
+        "Cookie": "D5O_openinfos={};D5O_advice_brandid_0=1903098;D5O_back_sid_0=10a1d7ac79d49544".format(headers_data2),
+        # "cookie": "D5O_openinfos={};D5O_uphit_1903098=562665;D5O_advice_brandid_0=1903098;D5O_back_sid_0=10a1d7ac79d49544".format(headers_data2),
+        "User-Agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_6) AppleWebKit/605.1.15 (KHTML, like Gecko) MicroMessenger/6.8.0(0x16080000) MacWechat/2.4.2(0x12040212) NetType/WIFI WindowsWechat"
+    }
+    token_res = requests.get("https://h5.zhiyyuan.cn/m.php?v=10a1d7ac79d49544", verify=False, headers=headers)
+    # print(token_res.text)
+    cookies = requests.utils.dict_from_cookiejar(token_res.cookies)
+    uphit = cookies['D5O_uphit_1903098']
+    print("uphit: {}".format(uphit))
+
+    ########################## step2: get token ########################################
+    headers2 = {
+        "Accept": "*/*",
+        "Host": "h5.zhiyyuan.cn",
+        "Cookie": "D5O_openinfos={};D5O_uphit_1903098={};D5O_advice_brandid_0=1903098;D5O_back_sid_0=10a1d7ac79d49544".format(
+            headers_data2, uphit),
+        "User-Agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_6) AppleWebKit/605.1.15 (KHTML, like Gecko) MicroMessenger/6.8.0(0x16080000) MacWechat/2.4.2(0x12040212) NetType/WIFI WindowsWechat"
+    }
+    code = ''.join(str(uuid.uuid1()).split("-"))  # 生成将随机字符串 与 uuid拼接
+    print("code: {}".format(code))
+    payload = {
+        "jumpnum": 1,
+        "weixincheck": 1,
+        "dtime": int(time.time()),
+        "code": code,
+        "state": "https://h5.zhiyyuan.cn/m.php?v=10a1d7ac79d49544"
+    }
+    print(payload)
+    print(headers2)
+    session = requests.Session()
+    token_res = session.get("https://h5.zhiyyuan.cn/m.php", params=payload, verify=False, headers=headers2)
+    prog = re.compile(r"var tokenVal='(.*)'")
+    print('==========tokenVal===========')
+    token = prog.search(token_res.text).group(1)
+    print("tokenVal: {}".format(token))
+    return ouid, token
 
 
 def try_vote_once(ocr):
-
     ########################## step1: get verify img ########################################
     headers = {
+        "Host": "v.tiantianvote.com",
         "Content-Type": "application/x-www-form-urlencoded; charset=UTF-8",
         "Origin": "https://h5.zhiyyuan.cn",
-        # "Referer": "https://h5.zhiyyuan.cn/m.php?v=10a1d7ac79d49544?xcb808wy&id=157&sign=friend&id=110&sign=circle&id=125&sign=circle&id=125&sign=circle&id=106&sign=friend",
-        "User-Agent":"Mozilla/5.0 (Macintosh; Intel Mac OS X 10_13_1) AppleWebKit/604.3.5 (KHTML, like Gecko) MicroMessenger/6.8.0(0x16080000) MacWechat/2.4.2(0x12040211) NetType/WIFI WindowsWechat",
+        "Referer": "https://h5.zhiyyuan.cn/m.php?v=10a1d7ac79d49544?xcb808wy&id=157&sign=friend&id=110&sign=circle&id=125&sign=circle&id=125&sign=circle&id=106&sign=friend",
+        "User-Agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_13_1) AppleWebKit/604.3.5 (KHTML, like Gecko) MicroMessenger/6.8.0(0x16080000) MacWechat/2.4.2(0x12040211) NetType/WIFI WindowsWechat",
     }
     randomNum = 19030984501745 * 1000000 + random.randint(0, 999999)
     params = {
@@ -33,10 +88,9 @@ def try_vote_once(ocr):
     verifyCodeRes = requests.get(
         "https://v.tiantianvote.com/api/c2/captchas.png.php",
         headers=headers,
-        params=params)
+        params=params, verify=False)
     with open("verify.jpg", "wb+") as f:
         f.write(verifyCodeRes.content)
-
 
     ########################## step2: ocr verify img ########################################
     im = Image.open('verify.jpg')
@@ -109,7 +163,7 @@ def try_vote_once(ocr):
 
     ##调用ocr模型分辨验证码
     res = ocr.ocr_for_single_line('processed_verify.jpg')
-    
+
     ##检查ocr结果
     if len(res) != 4:
         return -1
@@ -118,7 +172,6 @@ def try_vote_once(ocr):
             return -1
     res = "".join(res)
     print("verify code: {}".format(res))
-
 
     ########################## step3: encode verify code ########################################
     def _aes_cipher(key, aes_str):
@@ -129,36 +182,47 @@ def try_vote_once(ocr):
         # 加密结果
         encrypted_text = str(base64.encodebytes(encrypt_aes), encoding='utf-8').strip()  # 解码
         return encrypted_text
+
     key = "cyLdMCXU"
     encryption_res = _aes_cipher(key, res)
     print("encry verify code: {}".format(encryption_res))
 
-
     ########################## step4: vote ########################################
-    res = requests.get("https://h5.zhiyyuan.cn/m.php?v=10a1d7ac79d49544?xcb808wy&id=157&sign=friend&id=110&sign=circle&id=125&sign=circle&id=125&sign=circle&id=106&sign=friend")
+    # 获取token
+    ouid, token = request_token()
+
+    # 检查验证码
+    # data_check = {
+    #     "captcha": encryption_res,
+    #     "rnd": randomNum,
+    #     "type": "2",
+    #     "id": "4501745"
+    # }
+    # check_res = requests.post("https://v.tiantianvote.com/api/c2/captchas.check1.php", data=data_check, headers=headers, verify=False)
+    # print("request response message: {}".format(json.loads(check_res.content)))
+    # print("request response message: {}".format(eval(check_res.text[1:])['msg']))
+
     data = {
         "brandid": "1903098",  # 固定
         "itemid": "4501745",  # 固定，与1中id保持统一
         "yqm": encryption_res,  # 3中获取的加密字符串
         "rnd": randomNum,  # 与1中rnd保持统一
-        "token": "8f87585e74d1a19c4f5638b1e64d334c",  # 为空字符串
-        "ouid": "33826263",  # 固定
+        "token": token,  # 为空字符串
+        "ouid": ouid,  # 固定
         "sid": "10a1d7ac79d49544"  # 微信的唯一id，不知是否是必填，到时候可以测一下，是否不传可行
     }
-    voteRes = requests.post("https://v.tiantianvote.com/v.php", headers=headers, data=data)
-    print("request response message: {}".format(voteRes.text))
-    print("request response message: {}".format(eval(voteRes.text[1:])['msg']))
+    voteRes = requests.post("https://v.tiantianvote.com/v.php", headers=headers, data=data, verify=False)
+    print("request response message: {}".format(json.loads(voteRes.content)))
+    # print("request response message: {}".format(eval(voteRes.text[1:])['msg']))
     rtn = eval(voteRes.text[1:])['msg']
     return rtn
 
 
-if __name__ == '__main__':
-
+def main():
     rtn = -1
     ocr = CnOcr(cand_alphabet=string.digits)
-
+    print('============开始投票=============')
     while True:
-
         start_time = datetime.datetime.strptime(str(datetime.datetime.now().date()) + '7:00', '%Y-%m-%d%H:%M')
         end_time = datetime.datetime.strptime(str(datetime.datetime.now().date()) + '23:50', '%Y-%m-%d%H:%M')
         # 当前时间
@@ -168,4 +232,9 @@ if __name__ == '__main__':
                 # 上一次尝试成功了， 需要休眠30分钟
                 time.sleep(30 * 60)
             rtn = try_vote_once(ocr)
-            time.sleep(3)
+            time.sleep(2)
+
+
+if __name__ == '__main__':
+    # main()
+    request_token()
